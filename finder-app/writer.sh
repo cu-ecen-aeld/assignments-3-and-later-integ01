@@ -11,10 +11,11 @@ else
 	WRITESTR=$2
 fi
 
-if ! [ -e "$WRITEFILE" ] 
+DIR="$(dirname "$WRITEFILE")"
+if ! [ -d "$DIR" ] 
 then
+	mkdir -p "$DIR"
 	#echo "FIle or directory not exists"
-	install -Dv /dev/null $WRITEFILE >> /dev/null
 fi
 
 echo "$WRITESTR" > "$WRITEFILE"
