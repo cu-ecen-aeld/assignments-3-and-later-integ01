@@ -1,5 +1,14 @@
 #include "systemcalls.h"
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/wait.h>
+#include <fcntl.h>
+#include <stdlib.h>
+#include <string.h>
+#include <libgen.h>
 
+extern char **environ;
 /**
  * @param cmd the command to execute with system()
  * @return true if the command in @param cmd was executed
@@ -16,7 +25,10 @@ bool do_system(const char *cmd)
  *   and return a boolean true if the system() call completed with success
  *   or false() if it returned a failure
 */
-
+    int ret =0;	
+    ret = system(cmd);
+    if (ret == -1)
+	    return false;
     return true;
 }
 
@@ -34,6 +46,23 @@ bool do_system(const char *cmd)
 *   by the command issued in @param arguments with the specified arguments.
 */
 
+
+void print_env(char* name, char **env)
+{
+   char cmpVal[6];
+   for(int i=0; env[i]!=NULL; i++)
+    {
+	strncpy(cmpVal,env[i],6);
+	cmpVal[5]=0;
+	if (strcmp(cmpVal,"PATH=") == 0) {
+		printf("Found PATH - reset it\n");
+		env[i][5] = 0;
+	}
+    
+        //printf("%s: %s\n",name, env[i]);
+
+    }
+}
 bool do_exec(int count, ...)
 {
     va_list args;
@@ -47,7 +76,7 @@ bool do_exec(int count, ...)
     command[count] = NULL;
     // this line is to avoid a compile warning before your implementation is complete
     // and may be removed
-    command[count] = command[count];
+    //command[count] = command[count];
 
 /*
  * TODO:
@@ -58,9 +87,44 @@ bool do_exec(int count, ...)
  *   as second argument to the execv() command.
  *
 */
+    int status = 0;
+    char fullcmd[100];
+    strcpy(fullcmd, command[0]);
+    //print_env("env", environ);
 
+    int pid = fork();
+    if (0 == pid) {
+	command[0] = basename(command[0]);
+	printf("full:%s, command:%s\n",fullcmd, command[0]);
+	if (-1 == execv(fullcmd, command) ) {
+		perror("execv"); return false;
+	}
+    }		
+    else // This is the parent
+    { 
+	if (-1 == pid) {
+	 	perror("fork"); return false;
+	}
+    	 //Pid>0 
+	printf("== parent before wait ==\n");
+  	printf("cmd:%s, arg:%s, %s, status:%x\n", command[0], command[1],command[2], status);
+	//int ret = wait(&status);
+	int ret = waitpid(pid, &status, 0);
+	if (-1 == ret) {
+		perror("wait"); return false;
+	}
+
+	printf("== parent After wait :ret:%d ==\n",ret);
+  	printf("cmd:%s, status:%x\n", command[0],status);
+	if WIFEXITED(status) {
+		printf("WEXITSTATUS(status) :%d\n",WEXITSTATUS(status) );
+		if (WEXITSTATUS(status) == 0 && status == 0)
+			return true;
+		else
+			return false;
+	}
+    }
     va_end(args);
-
     return true;
 }
 
@@ -82,7 +146,7 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
     command[count] = NULL;
     // this line is to avoid a compile warning before your implementation is complete
     // and may be removed
-    command[count] = command[count];
+    //command[count] = command[count];
 
 
 /*
@@ -92,7 +156,47 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
  *   The rest of the behaviour is same as do_exec()
  *
 */
+    int status = 0;
+    int fd = open(outputfile, O_WRONLY|O_TRUNC|O_CREAT, 0644);
+    if (fd < 0) { perror("open"); abort(); }
+    
+    char fullcmd[100];
+    strcpy(fullcmd, command[0]);
+  
+   int pid = fork();
+   if (-1 == pid) {
+	perror("fork"); return false;
+   }
+   else if (0 == pid) {
 
+
+	 if (dup2(fd, 1) < 0) { perror("dup2"); return false; }
+	 close(fd);
+
+	command[0] = basename(command[0]);
+	//printf("full:%s, command:%s\n",fullcmd, command[0]);
+
+	if (-1 == execv(fullcmd, command) ) {
+		perror("execv"); return false;
+	}
+    }		
+    else // This is the parent
+    { 
+    	 //Pid>0 
+	int ret = wait(&status);
+	close(fd);
+	if (-1 == ret) {
+		perror("wait"); return false;
+	}
+	if WIFEXITED(status) {
+		//printf("WEXITSTATUS(status) :%d\n",WEXITSTATUS(status) );
+		if (WEXITSTATUS(status) == 0 && status == 0)
+			return true;
+		else
+			return false;
+	}
+    }
+    
     va_end(args);
 
     return true;
