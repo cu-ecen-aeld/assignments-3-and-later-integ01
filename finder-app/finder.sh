@@ -14,7 +14,7 @@ fi
 if [ -d "$FILESDIR" ]
 then
 	X="$(find "$FILESDIR" | wc -l)"
-	((X--))
+	X=$((X-1))
 	Y="$(grep -r $SEARCHSTR $FILESDIR | wc -l)"
 	echo "The number of files are $X and the number of matching lines are $Y"
 else
