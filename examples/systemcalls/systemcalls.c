@@ -95,8 +95,8 @@ bool do_exec(int count, ...)
     int pid = fork();
     if (0 == pid) {
 	command[0] = basename(command[0]);
-	printf("full:%s, command:%s\n",fullcmd, command[0]);
-	if (-1 == execv(fullcmd, command) ) {
+//	printf("full:%s, command:%s %s %s \n",fullcmd, command[0], command[1], command[2]);
+	if (-1 == execv(fullcmd, &command[0]) ) {
 		perror("execv"); return false;
 	}
     }		
@@ -106,18 +106,18 @@ bool do_exec(int count, ...)
 	 	perror("fork"); return false;
 	}
     	 //Pid>0 
-	printf("== parent before wait ==\n");
-  	printf("cmd:%s, arg:%s, %s, status:%x\n", command[0], command[1],command[2], status);
+	//printf("== parent before wait ==\n");
+  	//printf("cmd:%s, arg:%s, %s, status:%x\n", command[0], command[1],command[2], status);
 	//int ret = wait(&status);
 	int ret = waitpid(pid, &status, 0);
 	if (-1 == ret) {
 		perror("wait"); return false;
 	}
 
-	printf("== parent After wait :ret:%d ==\n",ret);
-  	printf("cmd:%s, status:%x\n", command[0],status);
+	//printf("== parent After wait :ret:%d ==\n",ret);
+  	//printf("cmd:%s, status:%x\n", command[0],status);
 	if WIFEXITED(status) {
-		printf("WEXITSTATUS(status) :%d\n",WEXITSTATUS(status) );
+	//	printf("WEXITSTATUS(status) :%d\n",WEXITSTATUS(status) );
 		if (WEXITSTATUS(status) == 0 && status == 0)
 			return true;
 		else
@@ -183,7 +183,10 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
     else // This is the parent
     { 
     	 //Pid>0 
-	int ret = wait(&status);
+	int ret = waitpid(pid, &status, 0);
+
+	//int ret = wait(&status);
+
 	close(fd);
 	if (-1 == ret) {
 		perror("wait"); return false;
