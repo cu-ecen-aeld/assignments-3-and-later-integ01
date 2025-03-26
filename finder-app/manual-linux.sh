@@ -87,11 +87,18 @@ ${CROSS_COMPILE}readelf -a bin/busybox | grep "program interpreter"
 ${CROSS_COMPILE}readelf -a bin/busybox | grep "Shared library"
 
 # TODO: Add library dependencies to rootfs
-GCC_PATH="/home/integ/Desktop/Builds/arm-gnu-toolchain-13.3.rel1-x86_64-aarch64-none-linux-gnu"
-cp ${GCC_PATH}/aarch64-none-linux-gnu/libc/lib64/libm.so.6 lib64/
-cp ${GCC_PATH}/aarch64-none-linux-gnu/libc/lib64/libresolv.so.2 lib64/
-cp ${GCC_PATH}/aarch64-none-linux-gnu/libc/lib64/libc.so.6 lib64/
-cp ${GCC_PATH}/aarch64-none-linux-gnu/libc/lib/ld-linux-aarch64.so.1 lib/
+GCC_PATH="${OLD_PWD}/gcc_resource"
+unzip "${GCC_PATH}.zip" -d ${OLD_PWD}
+cp ${GCC_PATH}/libm.so.6 lib64/
+cp ${GCC_PATH}/libresolv.so.2 lib64/
+cp ${GCC_PATH}/libc.so.6 lib64/
+cp ${GCC_PATH}/ld-linux-aarch64.so.1 lib/
+
+
+#cp ${GCC_PATH}/aarch64-none-linux-gnu/libc/lib64/libm.so.6 lib64/
+#cp ${GCC_PATH}/aarch64-none-linux-gnu/libc/lib64/libresolv.so.2 lib64/
+#cp ${GCC_PATH}/aarch64-none-linux-gnu/libc/lib64/libc.so.6 lib64/
+#cp ${GCC_PATH}/aarch64-none-linux-gnu/libc/lib/ld-linux-aarch64.so.1 lib/
 
 # TODO: Make device nodes
 sudo mknod -m 666 dev/null  c 1 3
