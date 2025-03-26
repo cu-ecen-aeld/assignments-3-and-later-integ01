@@ -39,7 +39,7 @@ if [ ! -e ${OUTDIR}/linux-stable/arch/${ARCH}/boot/Image ]; then
     make ARCH=arm64 CROSS_COMPILE=aarch64-none-linux-gnu- mrproper
     make ARCH=arm64 CROSS_COMPILE=aarch64-none-linux-gnu- defconfig
     make -j10 ARCH=arm64 CROSS_COMPILE=aarch64-none-linux-gnu- all
-    make ARCH=arm64 CROSS_COMPILE=aarch64-none-linux-gnu- modules
+    #make ARCH=arm64 CROSS_COMPILE=aarch64-none-linux-gnu- modules
 else
     OLD_PWD=${OLDPWD}    
 fi
@@ -88,7 +88,7 @@ ${CROSS_COMPILE}readelf -a bin/busybox | grep "Shared library"
 
 # TODO: Add library dependencies to rootfs
 GCC_PATH="${OLD_PWD}/gcc_resource"
-unzip "${GCC_PATH}.zip" -d ${OLD_PWD}
+#unzip "${GCC_PATH}.zip" -d ${OLD_PWD}
 cp ${GCC_PATH}/libm.so.6 lib64/
 cp ${GCC_PATH}/libresolv.so.2 lib64/
 cp ${GCC_PATH}/libc.so.6 lib64/
