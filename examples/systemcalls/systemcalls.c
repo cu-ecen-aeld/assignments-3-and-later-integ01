@@ -27,8 +27,10 @@ bool do_system(const char *cmd)
 */
     int ret =0;	
     ret = system(cmd);
-    if (ret == -1)
+    if (ret == -1) {
+	    perror("system");
 	    return false;
+}
     return true;
 }
 
@@ -97,7 +99,9 @@ bool do_exec(int count, ...)
 	command[0] = basename(command[0]);
 //	printf("full:%s, command:%s %s %s \n",fullcmd, command[0], command[1], command[2]);
 	if (-1 == execv(fullcmd, &command[0]) ) {
-		perror("execv"); return false;
+		perror("execv"); 
+		exit(EXIT_FAILURE);
+		//return false;
 	}
     }		
     else // This is the parent
@@ -122,6 +126,17 @@ bool do_exec(int count, ...)
 			return true;
 		else
 			return false;
+	}
+	else if (WIFSIGNALED(status)) {
+            printf("** child killed (signal %d)\n", WTERMSIG(status));
+	    return false;
+
+        } else if (WIFSTOPPED(status)) {
+            printf("** child stopped (signal %d)\n", WSTOPSIG(status));
+	    return false;
+	} else
+	{
+		return false;
 	}
     }
     va_end(args);
