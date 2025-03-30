@@ -1,6 +1,7 @@
 #include <stdbool.h>
 #include <pthread.h>
 
+
 /**
  * This structure should be dynamically allocated and passed as
  * an argument to your thread using pthread_create.
@@ -14,14 +15,17 @@ struct thread_data{
      * between the start_thread_obtaining_mutex function and
      * your thread implementation.
      */
-
+    pthread_t tid;
+    void (*callback)(void *); 
+    int wait_to_obtain_ms;
+    int wait_to_release_ms;
+    pthread_mutex_t *lock;
     /**
      * Set to true if the thread completed with success, false
      * if an error occurred.
      */
     bool thread_complete_success;
 };
-
 
 /**
 * Start a thread which sleeps @param wait_to_obtain_ms number of milliseconds, then obtains the
