@@ -1,3 +1,4 @@
+all: writer
 
 writer: writer.o
 		"$(CROSS_COMPILE)"gcc writer.c -o writer
