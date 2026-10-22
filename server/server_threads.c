@@ -1,6 +1,3 @@
-
-
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -119,6 +116,8 @@ static int scan_join_complete_threads(head_t *head)
 		printf("Doing join on thread: %lu\n",tdata->tid);
    		pthread_join(tdata->tid, NULL);
 		free(tdata->recv_buf);
+		close(tdata->sockfd);
+		free(tdata);
 		TAILQ_REMOVE(head, e, nodes);
 		free(e);
 		e = NULL;
@@ -221,6 +220,7 @@ bool start_thread_obtaining_mutex(struct thread_data **thrd_data, pthread_mutex_
     int rc = pthread_create(&(params->tid), NULL, threadfunc, (void *)params); 
     if (rc != 0) {
             printf("\nThread can't be created :[%s]", strerror(rc)); 
+	    close(params->sockfd);
 	    free(params->recv_buf);
 	    free(params);
     	    return false;
@@ -245,7 +245,8 @@ bool send_message(int sockfd, int outfd2)
 	file = fopen(FILE_NAME, "rb");
         if (file == NULL) {
         	perror("Error opening file");
-        	return EXIT_FAILURE;
+		return false;
+        	//return EXIT_FAILURE;
 	}
 	int outfd = fileno(file);
 /*
@@ -283,7 +284,8 @@ bool send_message(int sockfd, int outfd2)
 		eof = 1;
 	  }
 		  //read_buf[rlen-1]=10;
-	  printf("Send line from file'%s'\n", read_buf);
+	  //printf("Send line from file'%s'\n", read_buf);
+	  printf("Send line from file the received buffer\n");
 	  if (-1 == send(sockfd, read_buf, rlen, 0) ) 
 	  {
                	perror("server: send");
@@ -292,8 +294,10 @@ bool send_message(int sockfd, int outfd2)
 	  }
 		  rpos += rlen;
 	}  // End of file read and send
-	   
-	return final_res;
+	fclose(file);
+	if (final_res != 0)
+		return false;
+	return true;
 
 }
 
@@ -322,7 +326,7 @@ int write_with_timestamp(int outfd)
     return tslen2;
 
 }
-bool receive_save_message(int sockfd, char *buf, int outfd )
+bool receive_save_message(int sockfd, char *buf, int outfd,  pthread_mutex_t *lock)
 {
 
     ssize_t len = 0;
@@ -339,10 +343,21 @@ bool receive_save_message(int sockfd, char *buf, int outfd )
     int start_pack = 1;
     int end_pack = 0;
 
-    curLine = buf;
     do 
     {
+    curLine = buf;
+
     len = recv(sockfd, (void *)buf, MAX_BUFFER, 0);
+
+
+
+    usleep(20*1000);
+
+    if (0 != pthread_mutex_lock(lock))
+    {
+	    final_res =-1;
+	    return final_res;
+    }
 
 
     printf ("server, recived msg len: %d\n",(int)len);
@@ -354,8 +369,8 @@ bool receive_save_message(int sockfd, char *buf, int outfd )
 
     if (len == 0)
     {
-	final_res = 0;
-	break;
+	final_res = 1;
+	end_pack = 1;
     }
 
     for (char * nextLine = strchr(curLine, '\n') ; len > 0 && end_pack==0; nextLine = strchr(curLine, '\n') )
@@ -396,8 +411,9 @@ bool receive_save_message(int sockfd, char *buf, int outfd )
 		}
 		wpos += msgLen;
 		len -= msgLen;
+		curLine = nextLine+1;
 		printf("Complete packet receive - return to thread main");
-		return true;
+		//return final_res;
 	/*
 	        printf("wpos:%d, rpos: %d\n",(int)wpos, (int)rpos);
 		if (rpos != wpos ) {
@@ -443,11 +459,10 @@ bool receive_save_message(int sockfd, char *buf, int outfd )
 */
 	 } //end of else (eol reading
 
-		curLine = nextLine+1;
     } // end of for loop full packet until eol and resend(\n)
-  } while (end_pack != 1);
+  } while (end_pack != 1 || len > 0);
 
-  return 0;
+  return final_res;
 
 }
 
@@ -459,36 +474,49 @@ void* threadfunc(void* thread_param)
     //struct thread_data* thread_func_args = (struct thread_data *) thread_param;
     //
 
+    char *msg = NULL;
     struct thread_data* thread_args = (struct thread_data *) thread_param;
+
     //printf("thread:%d sleep start :%d \n",(int)thread_func_args->tid,thread_func_args->wait_to_obtain_ms );
-    usleep(thread_args->wait_to_obtain_ms*1000);
+    //usleep(thread_args->wait_to_obtain_ms*1000);
     //printf("thread:%d wakeup and trying to get mutex \n",(int)thread_func_args->tid);
 
     do {
-	if (0 != pthread_mutex_lock(thread_args->lock))
-	{
-	   return 0;
-	}
-	/********* get packet from client *************/
+//	if (0 != pthread_mutex_lock(thread_args->lock))
+//	{
+//	   return 0;
+//	}
+//	int res = pthread_mutex_trylock(thread_args->lock);
+//	if (res == 0 ||  res == EDEADLK)
 	printf("thread:%lu wakeup and got mutex \n",thread_args->tid);
+	int res = receive_save_message(thread_args->sockfd, thread_args->recv_buf, thread_args->out_wfd, thread_args->lock );
+	
+
+	/********* get packet from client *************/
 
 
-	bool res = receive_save_message(thread_args->sockfd, thread_args->recv_buf, thread_args->out_wfd );
-	if (!res) 
+	//int res = receive_save_message(thread_args->sockfd, thread_args->recv_buf, thread_args->out_wfd );
+	if (-1 == res) 
 	{
-    		thread_args->thread_done = true;
-    		thread_args->callback(thread_param);
-		perror("thread receive_save_message");
+		msg = "Err: thread receive_save_message";
+		goto cleanup;
+//    		thread_args->thread_done = true;
+ //   		thread_args->callback(thread_param);
+//		perror("thread receive_save_message");
 		return 0;
 	}
+	if (1 == res) 
+	{
+		goto cleanup;
+	}
+
 
     /********* end of get packet from client *************/
     	usleep(thread_args->wait_to_release_ms*1000);
     	if (0 != pthread_mutex_unlock(thread_args->lock))
     	{
-    	    thread_args->thread_done = true;
-    	    thread_args->callback(thread_param);
-	    return 0;
+	    msg = "thread unlock error";
+	    goto cleanup;
     	}
         printf("thread:%lu release mutex \n",thread_args->tid);
     //thread_func_args->callback(thread_param);
@@ -498,15 +526,27 @@ void* threadfunc(void* thread_param)
 	if (!res) 
 	{
     	    	thread_args->thread_done = true;
-    		thread_args->callback(thread_param);
-		perror("thread send_message");
-		return 0;
+		msg = "thread send_message";
+		goto cleanup;
 	}
 
 
     } while (!thread_args->child_end_flag); // end of main loop
-    thread_args->thread_done = true;
     thread_args->thread_complete_success = true; 
+    //Label
+    cleanup:
+    if (!thread_args->thread_done)
+    {
+	pthread_mutex_unlock(thread_args->lock);
+        printf("thread:%lu try to release mutex in case still locked\n",thread_args->tid);
+
+    }
+    thread_args->thread_done = true;
+    close(thread_args->sockfd);
+
+    if (NULL != msg) {
+	    perror(msg);
+    }
     thread_args->callback(thread_param);
     return thread_param;
 }
@@ -685,7 +725,8 @@ int main(int argc, char *argv[])
 	            &sin_size);
               if (new_fd == -1) {
       		      perror("accept");
-	            continue;
+	            break;
+
         	}
 
 	        inet_ntop(their_addr.ss_family,
@@ -722,6 +763,7 @@ int main(int argc, char *argv[])
     {
        //printf("%c", e->c);
     	struct thread_data *tdata =  e->thread_data;
+	shutdown(tdata->sockfd, SHUT_RDWR);
 	tdata->child_end_flag = 1;
     }
     printf("Main cleaning up : wait all thread to end and close up\n");
@@ -736,11 +778,13 @@ int main(int argc, char *argv[])
     	struct thread_data *tdata =  e->thread_data;
 	pthread_join(tdata->tid, NULL);
 	free(tdata->recv_buf);
+	close(tdata->sockfd);
+	free(tdata);
 	TAILQ_REMOVE(phead, e, nodes);
 	free(e);
 	e = NULL;
     }
-
+    close(out_wfd);
     int status = remove(FILE_NAME);
     if (status == 0) {
        	printf("File '%s' deleted successfully.\n", FILE_NAME);

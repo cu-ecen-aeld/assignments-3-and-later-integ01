@@ -1,12 +1,13 @@
 all: aesdsocket
 default: aesdsocket
 
+CFLAGS ?= -g -Wall -Wextra
 aesdsocket: aesdsocket.o
-		"$(CC)" -g server_threads.c -o aesdsocket -lm
+		$(CC) $(CFLAGS) aesdsocket.o -o aesdsocket $(LDFLAGS) -lm -lpthread
 #		"$(CROSS_COMPILE)"gcc -g server.c -o aesdsocket
 
 aesdsocket.o: server_threads.c
-	"$(CC)" -g -c server_threads.c -o aesdsocket.o
+	$(CC) $(CFLAGS) -c server_threads.c -o aesdsocket.o
 #	"$(CROSS_COMPILE)"gcc -g -c server.c -o aesdsocket.o
 
 clean:
