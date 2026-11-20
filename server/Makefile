@@ -1,7 +1,8 @@
 all: aesdsocket
 default: aesdsocket
 
-CFLAGS ?= -g -Wall -Wextra
+#CFLAGS ?= -g Wall -Wextra
+CFLAGS ?= -g -Wextra
 aesdsocket: aesdsocket.o
 		$(CC) $(CFLAGS) aesdsocket.o -o aesdsocket $(LDFLAGS) -lm -lpthread
 #		"$(CROSS_COMPILE)"gcc -g server.c -o aesdsocket
