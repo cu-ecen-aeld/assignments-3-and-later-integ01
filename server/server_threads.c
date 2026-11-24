@@ -116,7 +116,7 @@ static int scan_join_complete_threads(head_t *head)
 		printf("Doing join on thread: %lu\n",tdata->tid);
    		pthread_join(tdata->tid, NULL);
 		free(tdata->recv_buf);
-		close(tdata->sockfd);
+  //		close(tdata->sockfd); //already closed at the thrread
 		free(tdata);
 		TAILQ_REMOVE(head, e, nodes);
 		free(e);
@@ -143,20 +143,33 @@ void parent_handler(int signo)
 
 void parent_term_handler(int signo)
 {
-
-    printf("Parent:%d  sigterm : Received signal:%d\n", getpid(), signo);
-    parent_handler(signo); 
+    printf("Parent:%d  sigterm : Received signal:%d\n", getpid(), signo);    
+    parent_handler(signo);
 }
 
 
-struct timeval get_next_timer_timeout(double time_taken) {
-    struct timeval tv;
+struct timeval timespec_diff_to_timeval(const struct timespec *start, const struct timespec *end) 
+{
+    struct timeval result;
+    time_t sec_diff = end->tv_sec - start->tv_sec;
+    long nsec_diff = end->tv_nsec - start->tv_nsec;
 
-    tv.tv_sec = TS_PERIOD - round(time_taken) > 0 ? TS_PERIOD - (int)round(time_taken):0;
-// Wait 10 seconds max
-    tv.tv_usec = 0;
-    return tv;
+    result.tv_sec = 0;
+    // Handle underflow if end nanoseconds are smaller than start nanoseconds
+    if (nsec_diff < 0) {
+        sec_diff -= 1;
+        nsec_diff += 1000000000L; // Add 1 second in nanoseconds (10^9)
+    }
+
+    if (sec_diff < 0) {
+	    sec_diff = 0;
+	   }
+    result.tv_sec = sec_diff;
+    result.tv_usec = nsec_diff / 1000L; // Convert nanoseconds to microseconds
+					 //
+   return result;
 }
+
 #endif
 //head_t q_head;
 
@@ -373,7 +386,7 @@ bool receive_save_message(int sockfd, char *buf, int outfd,  pthread_mutex_t *lo
 	end_pack = 1;
     }
 
-    for (char * nextLine = strchr(curLine, '\n') ; len > 0 && end_pack==0; nextLine = strchr(curLine, '\n') )
+    for (char * nextLine = memchr(curLine, '\n',MAX_BUFFER) ; len > 0 && end_pack==0; nextLine = strchr(curLine, '\n') )
     {
 	if (start_pack) {
 	// Seek to the end of the file
@@ -521,7 +534,7 @@ void* threadfunc(void* thread_param)
         printf("thread:%lu release mutex \n",thread_args->tid);
     //thread_func_args->callback(thread_param);
     //free(thread_param);
-        printf("Trying to send message<<\n"); 
+  //      printf("Trying to send message<<\n"); 
 	res = send_message(thread_args->sockfd, thread_args->out_wfd );
 	if (!res) 
 	{
@@ -569,13 +582,11 @@ int main(int argc, char *argv[])
 
     bool daemon_mode = false;
     int opt;
-    static bool first_loop = false;
 
     signal(SIGINT,parent_handler);
     signal(SIGTERM, parent_term_handler);
 
 
-    printf("Trying to init queue");
     head_t q_head;
     TAILQ_INIT(&q_head); // initialize the head
 
@@ -651,18 +662,7 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
-//    sa.sa_handler = sigchld_handler; // reap all dead processes
-//    sigemptyset(&sa.sa_mask);
-//    sa.sa_flags = SA_RESTART;
-//    if (sigaction(SIGCHLD, &sa, NULL) == -1) {
-//        perror("sigaction");
-//        exit(1);
-//    }
-    // Opening the file in read mode
-    //fptr = fopen("filename.txt", "w+");
-    //int out_wfd = fileno(fptr);
-        //fptr2 = fopen("filename.txt", "r");
-	//int out_rfd = fileno(fptr2;
+
     out_wfd = open(FILE_NAME, O_WRONLY | O_CREAT | O_TRUNC, 0666);
     if (out_wfd == -1)
         return errno;
@@ -670,52 +670,57 @@ int main(int argc, char *argv[])
 
     printf("server: waiting for connections...\n");
     long offset = 0;
-    struct timespec start, end;
-    double time_taken  = 5;
+    struct timespec next_ts, now, end;
+    double time_taken  = 0;
+
+		clock_gettime(CLOCK_MONOTONIC, &next_ts);
+		next_ts.tv_sec += 10;
 
     while(!parent_end_flag) {  // main accept() loop
-	fd_set read_fds;
+      	fd_set read_fds;
         FD_ZERO(&read_fds);
         FD_SET(sockfd, &read_fds);		       //
 
 	 // 1. Calculate the timeout dynamically for this iteration
-        struct timeval timeout = get_next_timer_timeout(time_taken);
-	printf("Setting timeout to:%d , last loop time:%f\n",(int)timeout.tv_sec, time_taken);
+//        struct timeval timeout = get_next_timer_timeout(time_taken);
+//
+//	printf("Setting timeout to:%d , last loop time:%f\n",(int)timeout.tv_sec, time_taken);
    	 // Get starting timestamp
-        timespec_get(&start, TIME_UTC);
+ //       timespec_get(&start, TIME_UTC);
 
 
 
         // 2. Call select
-        int activity = select(sockfd + 1, &read_fds, NULL, NULL, &timeout);
+	
+	clock_gettime(CLOCK_MONOTONIC, &now);
+  struct timeval timeout = timespec_diff_to_timeval(&now, &next_ts);
+  int activity = select(sockfd + 1, &read_fds, NULL, NULL, &timeout);
 
 	if (activity < 0) {
             perror("select error");
             break;
-        } else if (activity == 0) {
-            printf("Timer expired! Generate time stamp.\n");
-	    //TODO
-	    //
-	    //
+  } else if (activity == 0) 
+  {
+      printf("Timer expired! Generate time stamp.\n");
 	    if (0 != pthread_mutex_lock(&lock))
 	    {
-	   	return 0;
+	     	return 0;
 	    }
-	    //if (!first_loop)
-	    write_with_timestamp(out_wfd); 
-	    first_loop = true;
+	    write_with_timestamp(out_wfd);
+      next_ts.tv_sec += TS_PERIOD;
+    
 	    if (0 != pthread_mutex_unlock(&lock))
 	    {
 	   	return 0;
 	    }
-	    if (child_end_signal) {
+  }
+	if (child_end_signal) {
 		    child_end_signal = 0;
 	            scan_join_complete_threads(&q_head);
 	    }
 	    else
 		    time_taken = 0;
             //continue;
-        }
 
         // Check if the listening socket has a pending connection
 	if (FD_ISSET(sockfd, &read_fds)) 
@@ -747,9 +752,6 @@ int main(int argc, char *argv[])
 	    	}
 	
 		insert_queue(&q_head, thrd_data); 
-		timespec_get(&end, TIME_UTC);
-		time_taken = (end.tv_sec - start.tv_sec) + 
-                       (end.tv_nsec - start.tv_nsec) / 1000000000.0;
     	}
     } //End of main while loop 
       
@@ -778,7 +780,7 @@ int main(int argc, char *argv[])
     	struct thread_data *tdata =  e->thread_data;
 	pthread_join(tdata->tid, NULL);
 	free(tdata->recv_buf);
-	close(tdata->sockfd);
+//	close(tdata->sockfd);
 	free(tdata);
 	TAILQ_REMOVE(phead, e, nodes);
 	free(e);
