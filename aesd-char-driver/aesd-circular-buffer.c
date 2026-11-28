@@ -17,7 +17,8 @@
 #include "aesd-circular-buffer.h"
 
 /**
- * @param buffer the buffer to search for corresponding offset.  Any necessary locking must be performed by caller.
+ * @param buffer the buffer to search for corresponding offset. 
+ * Any necessary locking must be performed by caller.
  * @param char_offset the position to search for in the buffer list, describing the zero referenced
  *      character index if all buffer strings were concatenated end to end
  * @param entry_offset_byte_rtn is a pointer specifying a location to store the byte of the returned aesd_buffer_entry
@@ -32,21 +33,94 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
     /**
     * TODO: implement per description
     */
-    return NULL;
+
+    struct aesd_buffer_entry *entryptr = NULL;
+    struct aesd_buffer_entry *entryptr_result = NULL;
+    size_t offset_c = 0;
+    uint8_t index = 0;
+    uint8_t end_index = 0;
+
+    end_index = (buffer->out_offs > buffer->in_offs)? buffer->out_offs : AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
+    // Count from in_offs up to max end of array
+    AESD_CIRCULAR_BUFFER_FOREACH(entryptr, buffer, index)
+    {
+      if (index >= buffer->in_offs && index < end_index )
+      {      
+        if (entryptr->size + offset_c > char_offset)
+        {
+              *entry_offset_byte_rtn = char_offset - offset_c;
+              entryptr_result = entryptr;
+              break;
+        }
+        else 
+            offset_c += entryptr->size;
+
+      }
+   }
+
+    // Continue count from start up to out_offs
+    if (NULL == entryptr_result)
+    {
+        end_index = buffer->out_offs;
+        AESD_CIRCULAR_BUFFER_FOREACH(entryptr, buffer, index)
+        {
+          if (index < end_index )
+          {      
+            if (entryptr->size + offset_c > char_offset)
+            {
+                  *entry_offset_byte_rtn = char_offset - offset_c;
+                  entryptr_result = entryptr;
+                  break;
+            }
+            else 
+                offset_c += entryptr->size;
+
+          }
+
+
+        }
+    }
+    return entryptr_result;
 }
 
 /**
-* Adds entry @param add_entry to @param buffer in the location specified in buffer->in_offs.
+* Adds entry @param add_entry to @param buffer in the location 
+* specified in buffer->in_offs.
 * If the buffer was already full, overwrites the oldest entry and advances buffer->out_offs to the
 * new start location.
 * Any necessary locking must be handled by the caller
-* Any memory referenced in @param add_entry must be allocated by and/or must have a lifetime managed by the caller.
+* Any memory referenced in @param add_entry must be allocated by and/or must
+* have a lifetime managed by the caller.
 */
 void aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const struct aesd_buffer_entry *add_entry)
 {
     /**
     * TODO: implement per description
     */
+     
+    if (buffer == NULL || add_entry == NULL)
+        return;
+    if (add_entry->buffptr == NULL)
+        return;
+    uint8_t in_offs = buffer->in_offs;
+    uint8_t out_offs = buffer->out_offs;
+    bool full = buffer->full; 
+
+    buffer->entry[in_offs].buffptr = add_entry->buffptr;
+    buffer->entry[in_offs].size = add_entry->size;
+    
+    //increment buffer indexes 
+    buffer->in_offs = (in_offs + 1) %
+      AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED ;
+    
+    if (buffer->full) {
+      buffer->out_offs = (out_offs + 1) %
+          AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED ;
+    }
+    
+    buffer->full = full ||
+            (buffer->in_offs == buffer->out_offs); 
+  //
 }
 
 /**
